@@ -10,8 +10,8 @@ on:
         options:
           - add
           - remove
-      userName:
-        description: "VRChat display name"
+      userNames:
+        description: "VRChat display names / 1行に1人"
         required: true
         type: string
 
@@ -35,10 +35,16 @@ jobs:
 
           path = "users.json"
           action = "${{ github.event.inputs.action }}"
-          user_name = "${{ github.event.inputs.userName }}".strip()
+          raw_names = """${{ github.event.inputs.userNames }}"""
 
-          if not user_name:
-              raise ValueError("userName is empty")
+          input_names = []
+          for line in raw_names.replace(",", "\n").splitlines():
+              name = line.strip()
+              if name and name not in input_names:
+                  input_names.append(name)
+
+          if not input_names:
+              raise ValueError("userNames is empty")
 
           if os.path.exists(path):
               with open(path, "r", encoding="utf-8") as f:
@@ -49,10 +55,13 @@ jobs:
           users = data.get("allowedUsers", [])
 
           if action == "add":
-              if user_name not in users:
-                  users.append(user_name)
+              for name in input_names:
+                  if name not in users:
+                      users.append(name)
+
           elif action == "remove":
-              users = [u for u in users if u != user_name]
+              users = [u for u in users if u not in input_names]
+
           else:
               raise ValueError("Unknown action")
 
@@ -63,6 +72,7 @@ jobs:
               f.write("\n")
 
           print(json.dumps(data, ensure_ascii=False, indent=2))
+          print("Input count:", len(input_names))
           print("User count:", len(users))
           PY
 
