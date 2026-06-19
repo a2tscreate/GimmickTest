@@ -1,0 +1,86 @@
+name: Manage Users
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "追加 or 削除"
+        required: true
+        type: choice
+        options:
+          - add
+          - remove
+      userName:
+        description: "VRChat display name"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  update-users:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update users.json
+        run: |
+          python3 << 'PY'
+          import json
+          import os
+
+          path = "users.json"
+          action = "${{ github.event.inputs.action }}"
+          user_name = "${{ github.event.inputs.userName }}".strip()
+
+          if not user_name:
+              raise ValueError("userName is empty")
+
+          if os.path.exists(path):
+              with open(path, "r", encoding="utf-8") as f:
+                  data = json.load(f)
+          else:
+              data = {"allowedUsers": []}
+
+          users = data.get("allowedUsers", [])
+
+          if action == "add":
+              if user_name not in users:
+                  users.append(user_name)
+          elif action == "remove":
+              users = [u for u in users if u != user_name]
+          else:
+              raise ValueError("Unknown action")
+
+          data["allowedUsers"] = users
+
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+
+          print(json.dumps(data, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add users.json
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+
+          git commit -m "Update allowed users"
+          git push
+
+      - name: Show users.json URL
+        run: |
+          echo "users.json URL:"
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/users.json"
+  
